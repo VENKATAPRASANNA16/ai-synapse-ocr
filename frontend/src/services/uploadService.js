@@ -1,43 +1,115 @@
 import api from './api';
 
 export const uploadService = {
-  async uploadDocument(file, onProgress) {
-    const formData = new FormData();
-    formData.append('file', file);
+  async uploadFile(file, options = {}) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
 
-    const response = await api.post('/upload/', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      onUploadProgress: (progressEvent) => {
-        const percentCompleted = Math.round(
-          (progressEvent.loaded * 100) / progressEvent.total
-        );
-        onProgress?.(percentCompleted);
-      },
-    });
+      const response = await api.post('/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          if (options.onProgress) {
+            const percentCompleted = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total
+            );
+            options.onProgress(percentCompleted);
+          }
+        },
+      });
 
-    return response.data;
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Upload failed');
+    }
   },
 
-  async getMyDocuments(skip = 0, limit = 20) {
-    const response = await api.get('/upload/my-documents', {
-      params: { skip, limit },
-    });
-    return response.data;
+  async uploadMultiple(files, options = {}) {
+    try {
+      const formData = new FormData();
+      files.forEach((file) => {
+        formData.append('files', file);
+      });
+
+      const response = await api.post('/upload/multiple', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          if (options.onProgress) {
+            const percentCompleted = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total
+            );
+            options.onProgress(percentCompleted);
+          }
+        },
+      });
+
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Upload failed');
+    }
   },
 
-  async getDocument(documentId) {
-    const response = await api.get(`/upload/${documentId}`);
-    return response.data;
+  async getFiles() {
+    try {
+      const response = await api.get('/upload/files');
+      return response.data;
+    } catch (error) {
+      throw new Error('Failed to get files');
+    }
   },
 
-  async deleteDocument(documentId) {
-    await api.delete(`/upload/${documentId}`);
+  async getFile(fileId) {
+    try {
+      const response = await api.get(`/upload/files/${fileId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error('Failed to get file');
+    }
   },
 
-  async getGuestUploadInfo() {
-    const response = await api.get('/upload/guest-upload');
-    return response.data;
-  }
+  async deleteFile(fileId) {
+    try {
+      const response = await api.delete(`/upload/files/${fileId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error('Failed to delete file');
+    }
+  },
+
+  async downloadFile(fileId) {
+    try {
+      const response = await api.get(`/upload/files/${fileId}/download`, {
+        responseType: 'blob',
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error('Failed to download file');
+    }
+  },
+
+  validateFile(file) {
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'image/jpeg',
+      'image/png',
+      'image/jpg',
+    ];
+
+    if (file.size > maxSize) {
+      return { valid: false, error: 'File size exceeds 10MB limit' };
+    }
+
+    if (!allowedTypes.includes(file.type)) {
+      return { valid: false, error: 'File type not supported' };
+    }
+
+    return { valid: true };
+  },
 };

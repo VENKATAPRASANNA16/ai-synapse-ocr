@@ -7,7 +7,7 @@ from ..services.auth_service import AuthService
 from ..utils.database import get_database
 from ..utils.security import validate_token
 
-router = APIRouter(prefix="/api/auth", tags=["Authentication"])
+router = APIRouter(tags=["Authentication"])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -68,12 +68,42 @@ async def login(
     return token
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(
-    current_user: UserInDB = Depends(get_current_user)
-):
-    """Get current user information"""
-    return UserResponse(**current_user.dict())
-
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    auth_service: AuthService = Depends(get_auth_service)
+) -> UserInDB:
+    """Get current authenticated user"""
+    print(f"Token received: {token[:20]}..." if token else "No token")
+    
+    try:
+        payload = validate_token(token)
+        print(f"Token payload: {payload}")
+        
+        user_id = payload.get("sub")
+        print(f"User ID from token: {user_id}")
+        
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: no user ID"
+            )
+        
+        user = await auth_service.get_user_by_id(user_id)
+        print(f"User found: {user is not None}")
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found"
+            )
+        
+        return user
+    except Exception as e:
+        print(f"Error in get_current_user: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Authentication failed: {str(e)}"
+        )
 @router.post("/logout")
 async def logout(current_user: UserInDB = Depends(get_current_user)):
     """Logout (client-side token removal)"""

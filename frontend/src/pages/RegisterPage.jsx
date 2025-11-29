@@ -1,102 +1,102 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Eye, EyeOff, Loader2, FileText } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { APP_NAME } from '../utils/constants';
 
-export const RegisterPage = () => {
+const RegisterPage = () => {
   const [formData, setFormData] = useState({
+    name: '',
     email: '',
     password: '',
     confirmPassword: '',
-    full_name: ''
   });
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
+  const [loading, setLoading] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    setFormData((prev) => ({
+      ...prev,
+      [e.target.name]: e.target.value,
+    }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-
     if (formData.password.length < 8) {
       setError('Password must be at least 8 characters long');
       return;
     }
-
     setLoading(true);
-
-    const result = await register({
-      email: formData.email,
-      password: formData.password,
-      full_name: formData.full_name,
-      role: 'member'
-    });
-
-    if (result.success) {
-      navigate('/login', { 
-        state: { message: 'Registration successful! Please log in.' } 
-      });
-    } else {
-      setError(result.error);
-      setLoading(false);
-    }
+  const result = await register({
+    fullName: formData.name,  // Changed from 'name' to 'fullName'
+    email: formData.email,
+    password: formData.password,
+  });
+  if (result.success) {
+    navigate('/dashboard')
+  } else {
+    setError(result.error || 'Registration failed. Please try again.');
+  }
+  setLoading(false);
   };
 
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <FileText className="mx-auto h-12 w-12 text-primary-500" />
-          <h2 className="mt-6 text-3xl font-bold text-gray-900">
+        <div>
+          <div className="flex justify-center mb-6">
+            <div className="w-16 h-16 bg-indigo-600 rounded-xl flex items-center justify-center">
+              <span className="text-white text-2xl font-bold">AI</span>
+            </div>
+          </div>
+          <h2 className="text-center text-3xl font-bold text-gray-900">
             Create your account
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Join {APP_NAME} and start processing documents
+          <p className="mt-2 text-center text-sm text-gray-600">
+            Start processing documents with AI-powered OCR
           </p>
         </div>
 
         {error && (
-          <div className="rounded-md bg-red-50 p-4">
-            <p className="text-sm text-red-800">{error}</p>
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <span className="text-red-500">❌</span>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            </div>
           </div>
         )}
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="mt-8 space-y-6">
           <div className="space-y-4">
             <div>
-              <label htmlFor="full_name" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
                 Full Name
               </label>
               <input
-                id="full_name"
-                name="full_name"
+                id="name"
+                name="name"
                 type="text"
                 required
-                value={formData.full_name}
+                value={formData.name}
                 onChange={handleChange}
-                className="input-field mt-1"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                 placeholder="Enter your full name"
               />
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                 Email address
               </label>
               <input
@@ -106,77 +106,59 @@ export const RegisterPage = () => {
                 required
                 value={formData.email}
                 onChange={handleChange}
-                className="input-field mt-1"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                 placeholder="Enter your email"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                 Password
               </label>
-              <div className="relative mt-1">
-                <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={formData.password}
-                  onChange={handleChange}
-                  className="input-field pr-10"
-                  placeholder="Create a password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-              </div>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                required
+                value={formData.password}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                placeholder="Create a password"
+              />
               <p className="mt-1 text-xs text-gray-500">
-                Must be at least 8 characters long
+                Must be at least 8 characters with uppercase, lowercase, and number
               </p>
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
                 Confirm Password
               </label>
               <input
                 id="confirmPassword"
                 name="confirmPassword"
-                type={showPassword ? 'text' : 'password'}
+                type="password"
                 required
                 value={formData.confirmPassword}
                 onChange={handleChange}
-                className="input-field mt-1"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                 placeholder="Confirm your password"
               />
             </div>
           </div>
 
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full btn-primary flex items-center justify-center"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Creating account...
-                </>
-              ) : (
-                'Create account'
-              )}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {loading ? 'Creating account...' : 'Create Account'}
+          </button>
 
           <div className="text-center">
             <p className="text-sm text-gray-600">
               Already have an account?{' '}
-              <Link to="/login" className="font-medium text-primary-600 hover:text-primary-500">
+              <Link to="/login" className="text-indigo-600 hover:text-indigo-500 font-medium">
                 Sign in
               </Link>
             </p>
@@ -186,3 +168,5 @@ export const RegisterPage = () => {
     </div>
   );
 };
+
+export default RegisterPage;

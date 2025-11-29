@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { uploadService } from '../services/uploadService';
 
 export const useUpload = () => {
@@ -6,37 +6,35 @@ export const useUpload = () => {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
 
-  const uploadDocument = async (file) => {
+  const upload = useCallback(async (file) => {
     setUploading(true);
-    setError(null);
     setProgress(0);
+    setError(null);
 
     try {
-      const result = await uploadService.uploadDocument(file, (percent) => {
-        setProgress(percent);
+      const result = await uploadService.uploadFile(file, {
+        onProgress: (p) => setProgress(p),
       });
-
-      setUploading(false);
-      setProgress(100);
       return { success: true, data: result };
     } catch (err) {
+      setError(err.message);
+      return { success: false, error: err.message };
+    } finally {
       setUploading(false);
-      setError(err.response?.data?.detail || 'Upload failed');
-      return { success: false, error: err.response?.data?.detail };
     }
-  };
+  }, []);
 
-  const reset = () => {
+  const reset = useCallback(() => {
     setUploading(false);
     setProgress(0);
     setError(null);
-  };
+  }, []);
 
   return {
+    upload,
     uploading,
     progress,
     error,
-    uploadDocument,
-    reset
+    reset,
   };
 };

@@ -1,146 +1,140 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UploadZone } from '../components/Upload/UploadZone';
-import { ProgressBar } from '../components/Upload/ProgressBar';
-import { useUpload } from '../hooks/useUpload';
-import { CheckCircle } from 'lucide-react';
+import UploadZone from '../components/Upload/UploadZone';
+import FileCard from '../components/Upload/FileCard';
+import ProgressBar from '../components/Upload/ProgressBar';
+import { useUpload } from '../context/UploadContext';
+import { uploadService } from '../services/uploadService';
 
-export const UploadPage = () => {
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [uploadedDocument, setUploadedDocument] = useState(null);
-  const { uploading, progress, error, uploadDocument, reset } = useUpload();
+const UploadPage = () => {
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState({});
   const navigate = useNavigate();
 
-  const handleFileSelect = (file) => {
-    reset();
-    setSelectedFile(file);
-    setUploadedDocument(null);
+  const handleFilesSelected = (files) => {
+    const validFiles = files.filter((file) => {
+      const validation = uploadService.validateFile(file);
+      if (!validation.valid) {
+        alert(`${file.name}: ${validation.error}`);
+        return false;
+      }
+      return true;
+    });
+
+    setSelectedFiles((prev) => [...prev, ...validFiles]);
   };
 
-  const handleUpload = async () => {
-    if (!selectedFile) return;
+  const handleRemoveFile = (fileToRemove) => {
+    setSelectedFiles((prev) => prev.filter((file) => file !== fileToRemove));
+  };
 
-    const result = await uploadDocument(selectedFile);
-    
-    if (result.success) {
-      setUploadedDocument(result.data);
+  const handleStartProcessing = async () => {
+    if (selectedFiles.length === 0) {
+      alert('Please select at least one file');
+      return;
     }
-  };
 
-  const handleProcessDocument = () => {
-    if (uploadedDocument) {
-      navigate(`/ocr/${uploadedDocument._id}`);
+    setUploading(true);
+
+    for (const file of selectedFiles) {
+      try {
+        await uploadService.uploadFile(file, {
+          onProgress: (p) => {
+            setProgress((prev) => ({
+              ...prev,
+              [file.name]: p,
+            }));
+          },
+        });
+      } catch (error) {
+        console.error(`Failed to upload ${file.name}:`, error);
+      }
     }
-  };
 
-  const handleUploadAnother = () => {
-    setSelectedFile(null);
-    setUploadedDocument(null);
-    reset();
+    setUploading(false);
+    navigate('/processing');
   };
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Upload Document</h1>
-        <p className="text-gray-600 mb-6">
-          Upload your document to start OCR processing and table extraction
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Upload Your Document</h1>
+        <p className="text-gray-600 mt-2">
+          Drag and drop your file or click to browse
         </p>
-
-        {!uploadedDocument ? (
-          <>
-            <UploadZone onFileSelect={handleFileSelect} disabled={uploading} />
-
-            {selectedFile && (
-              <div className="mt-6 space-y-4">
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <h3 className="text-sm font-medium text-gray-900 mb-2">Selected File</h3>
-                  <p className="text-sm text-gray-600">{selectedFile.name}</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
-                  </p>
-                </div>
-
-                {uploading && (
-                  <ProgressBar progress={progress} error={error} />
-                )}
-
-                {!uploading && !error && (
-                  <button
-                    onClick={handleUpload}
-                    className="w-full btn-primary"
-                  >
-                    Upload Document
-                  </button>
-                )}
-
-                {error && (
-                  <button
-                    onClick={handleUploadAnother}
-                    className="w-full btn-secondary"
-                  >
-                    Try Again
-                  </button>
-                )}
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="text-center py-8">
-            <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Upload Successful!
-            </h3>
-            <p className="text-gray-600 mb-6">
-              Your document has been uploaded successfully. You can now start processing it.
-            </p>
-
-            <div className="space-y-3">
-              <button
-                onClick={handleProcessDocument}
-                className="w-full btn-primary"
-              >
-                Start OCR Processing
-              </button>
-              <button
-                onClick={handleUploadAnother}
-                className="w-full btn-secondary"
-              >
-                Upload Another Document
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Information Section */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-blue-900 mb-4">
-          Supported Features
-        </h3>
-        <ul className="space-y-2 text-sm text-blue-800">
-          <li className="flex items-start">
+      <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <span className="text-2xl">👑</span>
+          </div>
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-blue-800">Unlock Full Processing Power</h3>
+            <p className="mt-1 text-sm text-blue-700">
+              Sign in to process unlimited files and access advanced features
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <UploadZone onFilesSelected={handleFilesSelected} />
+
+      {selectedFiles.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-gray-900">Selected Files</h3>
+          <div className="space-y-2">
+            {selectedFiles.map((file, index) => (
+              <div key={index}>
+                <FileCard file={file} onRemove={handleRemoveFile} />
+                {uploading && progress[file.name] !== undefined && (
+                  <div className="mt-2">
+                    <ProgressBar progress={progress[file.name]} fileName={file.name} />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex space-x-4">
+            <button
+              onClick={handleStartProcessing}
+              disabled={uploading || selectedFiles.length === 0}
+              className="flex-1 bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            >
+              {uploading ? 'Processing...' : 'Start Processing'}
+              </button>
+            <button
+              onClick={() => setSelectedFiles([])}
+              disabled={uploading}
+              className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Clear All
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">File Requirements</h3>
+        <div className="space-y-2 text-sm">
+          <div className="flex items-center text-green-600">
             <span className="mr-2">✓</span>
-            <span>Multi-engine OCR (Tesseract, PaddleOCR, EasyOCR)</span>
-          </li>
-          <li className="flex items-start">
+            <span>File format supported (PDF, DOC, DOCX)</span>
+          </div>
+          <div className="flex items-center text-green-600">
             <span className="mr-2">✓</span>
-            <span>Automatic table detection and extraction</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">✓</span>
-            <span>95%+ accuracy on most documents</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">✓</span>
-            <span>AI-powered document analysis and Q&A</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">✓</span>
-            <span>Support for PDF, JPG, PNG, and TIFF formats</span>
-          </li>
-        </ul>
+            <span>File size within limit (max 10MB)</span>
+          </div>
+          <div className="flex items-center text-orange-600">
+            <span className="mr-2">⚠</span>
+            <span>Guest users limited to 5 pages preview</span>
+          </div>
+        </div>
       </div>
     </div>
   );
 };
+
+export default UploadPage;

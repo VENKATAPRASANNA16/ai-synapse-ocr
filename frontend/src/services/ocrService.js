@@ -1,39 +1,86 @@
 import api from './api';
 
 export const ocrService = {
-  async startProcessing(documentId, engines = null) {
-    const response = await api.post(`/ocr/${documentId}/process`, { engines });
-    return response.data;
-  },
-
-  async getProcessingStatus(documentId) {
-    const response = await api.get(`/ocr/${documentId}/status`);
-    return response.data;
-  },
-
-  async getOCRResults(documentId) {
-    const response = await api.get(`/ocr/${documentId}/results`);
-    return response.data;
-  },
-
-  async pollStatus(documentId, onUpdate, interval = 2000) {
-    const poll = async () => {
-      try {
-        const status = await this.getProcessingStatus(documentId);
-        onUpdate(status);
-
-        if (status.status === 'completed' || status.status === 'failed') {
-          return status;
-        }
-
-        await new Promise(resolve => setTimeout(resolve, interval));
-        return poll();
-      } catch (error) {
-        console.error('Polling error:', error);
-        throw error;
+  async processDocument(file, options = {}) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('engine', options.engine || 'tesseract');
+      
+      if (options.language) {
+        formData.append('language', options.language);
       }
-    };
 
-    return poll();
-  }
+      const response = await api.post('/ocr/process', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          if (options.onProgress) {
+            const percentCompleted = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total
+            );
+            options.onProgress(percentCompleted);
+          }
+        },
+      });
+
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'OCR processing failed');
+    }
+  },
+
+  async getProcessingStatus(jobId) {
+    try {
+      const response = await api.get(`/ocr/status/${jobId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error('Failed to get processing status');
+    }
+  },
+
+  async getResult(jobId) {
+    try {
+      const response = await api.get(`/ocr/result/${jobId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error('Failed to get OCR result');
+    }
+  },
+
+  async cancelProcessing(jobId) {
+    try {
+      const response = await api.post(`/ocr/cancel/${jobId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error('Failed to cancel processing');
+    }
+  },
+
+  async getEngines() {
+    try {
+      const response = await api.get('/ocr/engines');
+      return response.data;
+    } catch (error) {
+      throw new Error('Failed to get available engines');
+    }
+  },
+
+  async validateDocument(file) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await api.post('/ocr/validate', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Validation failed');
+    }
+  },
 };

@@ -1,5 +1,4 @@
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorGridFSBucket
-from pymongo import MongoClient
 from typing import Optional
 import logging
 from ..config import settings
@@ -20,7 +19,8 @@ async def connect_to_mongo():
         db.client = AsyncIOMotorClient(
             settings.MONGODB_URL,
             maxPoolSize=settings.MONGODB_MAX_POOL_SIZE,
-            minPoolSize=settings.MONGODB_MIN_POOL_SIZE
+            minPoolSize=settings.MONGODB_MIN_POOL_SIZE,
+            serverSelectionTimeoutMS=5000  # 5 seconds timeout
         )
         db.db = db.client[settings.MONGODB_DB_NAME]
         db.gridfs = AsyncIOMotorGridFSBucket(db.db)
@@ -28,6 +28,7 @@ async def connect_to_mongo():
         # Test connection
         await db.client.admin.command('ping')
         logger.info("Successfully connected to MongoDB")
+        logger.info(f"Using database: {settings.MONGODB_DB_NAME}")
         
         # Create indexes
         await create_indexes()
@@ -48,29 +49,30 @@ async def close_mongo_connection():
 async def create_indexes():
     """Create database indexes"""
     try:
+        # Users collection
+        await db.db.users.create_index("email", unique=True)
+        await db.db.users.create_index("created_at")
+        
         # Documents collection
         await db.db.documents.create_index("user_id")
         await db.db.documents.create_index("created_at")
         await db.db.documents.create_index("status")
-        
-        # Users collection
-        await db.db.users.create_index("email", unique=True)
-        await db.db.users.create_index("created_at")
         
         # Audit logs collection
         await db.db.audit_logs.create_index("user_id")
         await db.db.audit_logs.create_index("timestamp")
         await db.db.audit_logs.create_index("action")
         
-        # Vector embeddings (if using MongoDB Atlas Vector Search)
-        # await db.db.embeddings.create_index([("vector", "vector")])
-        
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")
 
 def get_database():
+    if db.db is None:
+        raise Exception("Database not initialized. Call connect_to_mongo() first.")
     return db.db
 
 def get_gridfs():
+    if db.gridfs is None:
+        raise Exception("GridFS not initialized. Call connect_to_mongo() first.")
     return db.gridfs

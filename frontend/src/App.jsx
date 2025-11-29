@@ -1,130 +1,61 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ErrorBoundary } from './components/Common/ErrorBoundary';
-import { Navbar } from './components/Common/Navbar';
-import { Sidebar } from './components/Common/Sidebar';
-import { useAuth } from './hooks/useAuth';
-import { Loading } from './components/Common/Loading';
+import { AuthProvider } from './context/AuthContext';
+import { OCRProvider } from './context/OCRContext';
+import { QueryProvider } from './context/QueryContext';
+import { UploadProvider } from './context/UploadContext';
 
 // Pages
-import { LoginPage } from './pages/LoginPage';
-import { RegisterPage } from './pages/RegisterPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { UploadPage } from './pages/UploadPage';
-import { OCRProcessingPage } from './pages/OCRProcessingPage';
-import { QueryPage } from './pages/QueryPage';
-import { MyFilesPage } from './pages/MyFilesPage';
-import { ResultsPage } from './pages/ResultsPage';
+import HomePage from './pages/HomePage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import DashboardPage from './pages/DashboardPage';
+import UploadPage from './pages/UploadPage';
+import OCRProcessingPage from './pages/OCRProcessingPage';
+import QueryPage from './pages/QueryPage';
+import ResultsPage from './pages/ResultsPage';
+import AnalyticsPage from './pages/AnalyticsPage';
+import MyFilesPage from './pages/MyFilesPage';
+import SettingsPage from './pages/SettingsPage';
+import NotFound from './pages/NotFound';
 
-// Protected Route Component
-const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
-
-  if (loading) {
-    return <Loading />;
-  }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return children;
-};
-
-// Layout Component
-const DashboardLayout = ({ children }) => {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-      <div className="flex">
-        <Sidebar />
-        <main className="flex-1 md:ml-64 pt-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            {children}
-          </div>
-        </main>
-      </div>
-    </div>
-  );
-};
+// Auth Components
+import GuestAccess from './components/Auth/GuestAccess';
+import PrivateRoute from './components/Auth/PrivateRoute';
 
 function App() {
   return (
-    <ErrorBoundary>
-      <Router>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+    <AuthProvider>
+      <OCRProvider>
+        <QueryProvider>
+          <UploadProvider>
+            <Router>
+              <Routes>
+                {/* Public Routes */}
+                <Route path="/" element={<HomePage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/guest" element={<GuestAccess />} />
 
-          {/* Protected Routes */}
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <DashboardPage />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/upload"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <UploadPage />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/ocr/:documentId"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <OCRProcessingPage />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/query"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <QueryPage />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/my-files"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <MyFilesPage />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/results/:documentId"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <ResultsPage />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
+                {/* Protected Routes */}
+                <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
+                <Route path="/upload" element={<PrivateRoute><UploadPage /></PrivateRoute>} />
+                <Route path="/processing" element={<PrivateRoute><OCRProcessingPage /></PrivateRoute>} />
+                <Route path="/query" element={<PrivateRoute><QueryPage /></PrivateRoute>} />
+                <Route path="/results/:id" element={<PrivateRoute><ResultsPage /></PrivateRoute>} />
+                <Route path="/analytics" element={<PrivateRoute><AnalyticsPage /></PrivateRoute>} />
+                <Route path="/my-files" element={<PrivateRoute><MyFilesPage /></PrivateRoute>} />
+                <Route path="/settings" element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
 
-          {/* Default Route */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </Router>
-    </ErrorBoundary>
+                {/* 404 */}
+                <Route path="/404" element={<NotFound />} />
+                <Route path="*" element={<Navigate to="/404" />} />
+              </Routes>
+            </Router>
+          </UploadProvider>
+        </QueryProvider>
+      </OCRProvider>
+    </AuthProvider>
   );
 }
 

@@ -1,7 +1,6 @@
-import React from 'react';
-import { AlertTriangle } from 'lucide-react';
+import React, { Component } from 'react';
 
-export class ErrorBoundary extends React.Component {
+class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -18,21 +17,23 @@ export class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
-            <div className="flex items-center justify-center mb-4">
-              <AlertTriangle className="w-16 h-16 text-red-500" />
+        <div className="min-h-screen flex items-center justify-center bg-gray-100">
+          <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
+            <div className="text-center">
+              <div className="text-6xl mb-4">⚠️</div>
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                Oops! Something went wrong
+              </h1>
+              <p className="text-gray-600 mb-6">
+                We're sorry for the inconvenience. Please try refreshing the page.
+              </p>
+              <button
+                onClick={() => window.location.reload()}
+                className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700"
+              >
+                Refresh Page
+              </button>
             </div>
-            <h1 className="text-2xl font-bold text-center mb-4">Oops! Something went wrong</h1>
-            <p className="text-gray-600 text-center mb-6">
-              We're sorry, but something unexpected happened. Please try refreshing the page.
-            </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="w-full btn-primary"
-            >
-              Refresh Page
-            </button>
           </div>
         </div>
       );
@@ -41,3 +42,5 @@ export class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
+
+export default ErrorBoundary;

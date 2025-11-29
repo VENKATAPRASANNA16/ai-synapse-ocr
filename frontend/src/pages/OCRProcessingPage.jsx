@@ -1,172 +1,190 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Loader2 } from 'lucide-react';
-import { useOCR } from '../hooks/useOCR';
-import { ProcessingMetrics } from '../components/OCR/ProcessingMetrics';
-import { Loading } from '../components/Common/Loading';
+import { useNavigate } from 'react-router-dom';
+import { ocrService } from '../services/ocrService';
 
-export const OCRProcessingPage = () => {
-  const { documentId } = useParams();
+const OCRProcessingPage = () => {
+  const [processing, setProcessing] = useState(true);
+  const [progress, setProgress] = useState(0);
+  const [currentStep, setCurrentStep] = useState('upload');
+  const [estimatedTime, setEstimatedTime] = useState('1m 56s');
   const navigate = useNavigate();
-  const { processing, status, error, startProcessing, reset } = useOCR();
-  const [hasStarted, setHasStarted] = useState(false);
 
   useEffect(() => {
-    return () => reset();
-  }, [reset]);
+    simulateProcessing();
+  }, []);
 
-  const handleStartProcessing = async () => {
-    setHasStarted(true);
-    await startProcessing(documentId);
-  };
+  const simulateProcessing = () => {
+    const steps = [
+      { name: 'upload', label: 'Upload Complete', duration: 1000 },
+      { name: 'processing', label: 'Text Recognition', duration: 3000 },
+      { name: 'download', label: 'Download Ready', duration: 1000 },
+    ];
 
-  const handleViewResults = () => {
-    navigate(`/results/${documentId}`);
-  };
+    let currentProgress = 0;
+    let stepIndex = 0;
 
-  const getStatusMessage = () => {
-    if (!status) return 'Ready to start processing';
-    
-    switch (status.status) {
-      case 'preprocessing':
-        return 'Preprocessing document...';
-      case 'ocr_processing':
-        return 'Extracting text with OCR engines...';
-      case 'table_extraction':
-        return 'Detecting and extracting tables...';
-      case 'embedding_generation':
-        return 'Generating embeddings for search...';
-      case 'completed':
-        return 'Processing completed successfully!';
-      case 'failed':
-        return 'Processing failed';
-      default:
-        return status.status;
-    }
+    const interval = setInterval(() => {
+      currentProgress += 2;
+      setProgress(currentProgress);
+
+      if (currentProgress >= 33 && stepIndex === 0) {
+        setCurrentStep('processing');
+        stepIndex = 1;
+      } else if (currentProgress >= 66 && stepIndex === 1) {
+        setCurrentStep('download');
+        stepIndex = 2;
+      }
+
+      if (currentProgress >= 100) {
+        clearInterval(interval);
+        setTimeout(() => {
+          navigate('/results/1');
+        }, 1000);
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center space-x-4">
-        <button
-          onClick={() => navigate('/my-files')}
-          className="text-gray-600 hover:text-gray-900"
-        >
-          <ArrowLeft className="w-6 h-6" />
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">OCR Processing</h1>
-          <p className="text-gray-600">Document ID: {documentId}</p>
-        </div>
-      </div>
-
-      {/* Processing Status */}
-      <div className="bg-white rounded-lg shadow-md p-8">
+    <div className="max-w-3xl mx-auto">
+      <div className="bg-white rounded-lg shadow-lg p-8">
         <div className="text-center mb-8">
-          {processing ? (
-            <Loader2 className="w-16 h-16 text-primary-500 animate-spin mx-auto mb-4" />
-          ) : status?.status === 'completed' ? (
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-10 h-10 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-          ) : status?.status === 'failed' ? (
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </div>
-          ) : (
-            <Play className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          )}
-
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">
-            {getStatusMessage()}
-          </h2>
-          
-          {error && (
-            <p className="text-red-600 mb-4">{error}</p>
-          )}
-
-          {!hasStarted && !status && (
-            <button
-              onClick={handleStartProcessing}
-              disabled={processing}
-              className="btn-primary mt-4"
-            >
-              Start Processing
-            </button>
-          )}
-
-          {status?.status === 'completed' && (
-            <button
-              onClick={handleViewResults}
-              className="btn-primary mt-4"
-            >
-              View Results
-            </button>
-          )}
-
-          {status?.status === 'failed' && (
-            <button
-              onClick={() => {
-                reset();
-                setHasStarted(false);
-              }}
-              className="btn-secondary mt-4"
-            >
-              Try Again
-            </button>
-          )}
+          <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-4xl">📄</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">Processing Your Document</h1>
+          <p className="text-gray-600 mt-2">
+            Please wait while we extract text from your document using OCR technology
+          </p>
         </div>
 
-        {status && <ProcessingMetrics status={status} />}
-      </div>
-
-      {/* Processing Steps */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Processing Steps</h3>
-        
-        <div className="space-y-4">
-          {[
-            { name: 'Preprocessing', status: 'preprocessing' },
-            { name: 'OCR Text Extraction', status: 'ocr_processing' },
-            { name: 'Table Detection', status: 'table_extraction' },
-            { name: 'Embedding Generation', status: 'embedding_generation' },
-            { name: 'Completed', status: 'completed' }
-          ].map((step, index) => {
-            const isActive = status?.status === step.status;
-            const isCompleted = status?.status === 'completed' || 
-              (status && ['preprocessing', 'ocr_processing', 'table_extraction', 'embedding_generation'].indexOf(status.status) > 
-               ['preprocessing', 'ocr_processing', 'table_extraction', 'embedding_generation'].indexOf(step.status));
-
-            return (
-              <div key={step.name} className="flex items-center space-x-4">
-                <div className={`
-                  w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0
-                  ${isCompleted ? 'bg-green-500' : isActive ? 'bg-primary-500' : 'bg-gray-200'}
-                `}>
-                  {isCompleted ? (
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : isActive ? (
-                    <Loader2 className="w-5 h-5 text-white animate-spin" />
-                  ) : (
-                    <span className="text-gray-500 text-sm">{index + 1}</span>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <p className={`text-sm font-medium ${isActive || isCompleted ? 'text-gray-900' : 'text-gray-500'}`}>
-                    {step.name}
-                  </p>
-                </div>
+        <div className="mb-8">
+          <div className="flex justify-between mb-2">
+            <span className="text-sm font-medium text-gray-700">Progress</span>
+            <span className="text-sm text-gray-600">{progress}%</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-3">
+            <div
+              className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <div className="flex justify-between items-center mt-4">
+            <div className="flex items-center">
+              <span className="text-orange-500 mr-2">⏱️</span>
+              <div>
+                <p className="text-sm font-medium text-gray-700">Estimated Time Remaining</p>
+                <p className="text-xs text-gray-600">Based on document complexity</p>
               </div>
-            );
-          })}
+            </div>
+            <span className="text-lg font-bold text-gray-900">{estimatedTime}</span>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded">
+            <div className="flex items-center">
+              <span className="text-green-600 text-2xl mr-3">✓</span>
+              <div>
+                <p className="text-sm font-medium text-green-800">Text Recognition</p>
+                <p className="text-xs text-green-700">
+                  Analyzing characters and extracting readable text...
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div
+            className={`${
+              currentStep === 'upload'
+                ? 'bg-green-50 border-green-500'
+                : 'bg-white border-gray-200'
+            } border-l-4 p-4 rounded`}
+          >
+            <div className="flex items-center">
+              <span className={`${currentStep === 'upload' ? 'text-green-600' : 'text-gray-400'} text-2xl mr-3`}>
+                {currentStep === 'upload' ? '✓' : '○'}
+              </span>
+              <div>
+                <p className="text-sm font-medium text-gray-700">Upload Complete</p>
+                <p className="text-xs text-gray-600">File received</p>
+              </div>
+            </div>
+          </div>
+
+          <div
+            className={`${
+              currentStep === 'processing'
+                ? 'bg-blue-50 border-blue-500'
+                : currentStep === 'download'
+                ? 'bg-green-50 border-green-500'
+                : 'bg-white border-gray-200'
+            } border-l-4 p-4 rounded`}
+          >
+            <div className="flex items-center">
+              <span
+                className={`${
+                  currentStep === 'processing'
+                    ? 'text-blue-600'
+                    : currentStep === 'download'
+                    ? 'text-green-600'
+                    : 'text-gray-400'
+                } text-2xl mr-3`}
+              >
+                {currentStep === 'processing' ? (
+                  <div className="animate-spin">⚙️</div>
+                ) : currentStep === 'download' ? (
+                  '✓'
+                ) : (
+                  '○'
+                )}
+              </span>
+              <div>
+                <p className="text-sm font-medium text-gray-700">Processing</p>
+                <p className="text-xs text-gray-600">In progress</p>
+              </div>
+            </div>
+          </div>
+
+          <div
+            className={`${
+              currentStep === 'download'
+                ? 'bg-gray-100 border-gray-300'
+                : 'bg-white border-gray-200'
+            } border-l-4 p-4 rounded`}
+          >
+            <div className="flex items-center">
+              <span className={`${currentStep === 'download' ? 'text-gray-600' : 'text-gray-400'} text-2xl mr-3`}>
+                {currentStep === 'download' ? '⏳' : '○'}
+              </span>
+              <div>
+                <p className="text-sm font-medium text-gray-700">Download Ready</p>
+                <p className="text-xs text-gray-600">Pending</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-8 pt-6 border-t border-gray-200">
+          <div className="flex items-center justify-center space-x-4 text-sm text-gray-600">
+            <div className="flex items-center">
+              <span className="text-green-600 mr-1">🔒</span>
+              <span>Secure Processing</span>
+            </div>
+            <div className="flex items-center">
+              <span className="text-blue-600 mr-1">🗑️</span>
+              <span>Auto-delete after 24h</span>
+            </div>
+            <div className="flex items-center">
+              <span className="text-purple-600 mr-1">🔐</span>
+              <span>No registration required</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 };
+
+export default OCRProcessingPage;

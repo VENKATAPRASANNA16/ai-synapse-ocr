@@ -1,17 +1,19 @@
 import axios from 'axios';
-import { API_URL } from '../utils/constants';
 
+// Use environment variable or default to backend service
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Important for CORS with credentials
 });
 
-// Request interceptor to add auth token
+// Request interceptor
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token');
+    const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -22,14 +24,12 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor to handle errors
+// Response interceptor
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('user');
+      localStorage.removeItem('token');
       window.location.href = '/login';
     }
     return Promise.reject(error);

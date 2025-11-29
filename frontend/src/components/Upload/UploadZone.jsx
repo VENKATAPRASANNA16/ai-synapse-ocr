@@ -1,69 +1,63 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, File, AlertCircle } from 'lucide-react';
-import { ALLOWED_FILE_TYPES, MAX_FILE_SIZE } from '../../utils/constants';
 
-export const UploadZone = ({ onFileSelect, disabled = false }) => {
-  const onDrop = useCallback((acceptedFiles, rejectedFiles) => {
-    if (rejectedFiles.length > 0) {
-      const error = rejectedFiles[0].errors[0];
-      alert(error.message);
-      return;
-    }
+const UploadZone = ({ onFilesSelected }) => {
+  const [isDragActive, setIsDragActive] = useState(false);
 
-    if (acceptedFiles.length > 0) {
-      onFileSelect(acceptedFiles[0]);
-    }
-  }, [onFileSelect]);
+  const onDrop = useCallback((acceptedFiles) => {
+    onFilesSelected(acceptedFiles);
+    setIsDragActive(false);
+  }, [onFilesSelected]);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps } = useDropzone({
     onDrop,
-    accept: ALLOWED_FILE_TYPES,
-    maxSize: MAX_FILE_SIZE,
-    multiple: false,
-    disabled
+    accept: {
+      'application/pdf': ['.pdf'],
+      'application/msword': ['.doc'],
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'image/*': ['.png', '.jpg', '.jpeg'],
+    },
+    maxSize: 10485760, // 10MB
+    onDragEnter: () => setIsDragActive(true),
+    onDragLeave: () => setIsDragActive(false),
   });
 
   return (
     <div
       {...getRootProps()}
-      className={`
-        border-2 border-dashed rounded-lg p-12 text-center cursor-pointer
-        transition-colors duration-200
-        ${isDragActive 
-          ? 'border-primary-500 bg-primary-50' 
-          : 'border-gray-300 hover:border-primary-400'
-        }
-        ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
-      `}
+      className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
+        isDragActive
+          ? 'border-indigo-600 bg-indigo-50'
+          : 'border-gray-300 hover:border-indigo-400'
+      }`}
     >
       <input {...getInputProps()} />
-      
       <div className="flex flex-col items-center">
-        {isDragActive ? (
-          <>
-            <Upload className="w-16 h-16 text-primary-500 mb-4" />
-            <p className="text-lg font-medium text-primary-600">Drop your file here</p>
-          </>
-        ) : (
-          <>
-            <File className="w-16 h-16 text-gray-400 mb-4" />
-            <p className="text-lg font-medium text-gray-700 mb-2">
-              Drag and drop your file here
-            </p>
-            <p className="text-sm text-gray-500 mb-4">or click to browse</p>
-            
-            <div className="flex items-start space-x-2 text-sm text-gray-600 bg-gray-50 p-4 rounded-md max-w-md">
-              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-              <div className="text-left">
-                <p className="font-medium mb-1">Supported formats:</p>
-                <p>PDF, JPG, JPEG, PNG, TIFF</p>
-                <p className="mt-2">Maximum file size: 50MB</p>
-              </div>
-            </div>
-          </>
-        )}
+        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+          <span className="text-3xl">☁️</span>
+        </div>
+        <p className="text-lg font-medium text-gray-900 mb-2">
+          Drop your file here
+        </p>
+        <p className="text-sm text-gray-600 mb-4">
+          or click to select from your computer
+        </p>
+        <button className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">
+          Choose File
+        </button>
+        <div className="mt-6 space-y-1 text-xs text-gray-500">
+          <p className="flex items-center justify-center">
+            <span className="text-green-600 mr-2">✓</span>
+            File format supported (PDF, DOC, DOCX)
+          </p>
+          <p className="flex items-center justify-center">
+            <span className="text-green-600 mr-2">✓</span>
+            File size within limit (max 10MB)
+          </p>
+        </div>
       </div>
     </div>
   );
 };
+
+export default UploadZone;

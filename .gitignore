@@ -1,4 +1,4 @@
-# Create or update .gitignore
+# Step 1: Make sure .gitignore is correct
 @"
 # Virtual Environments
 .venv/
@@ -21,8 +21,6 @@ build/
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
 
 # OS
 .DS_Store
@@ -31,6 +29,29 @@ Thumbs.db
 # Logs
 *.log
 
-# Environment variables
+# Environment
 .env
-"@ | Out-File -FilePath .gitignore -Encoding utf8
+"@ | Out-File -FilePath .gitignore -Encoding utf8 -Force
+
+# Step 2: Delete the .git folder (removes all history)
+Remove-Item -Recurse -Force .git
+
+# Step 3: Remove the .venv folder from disk (you can recreate it later)
+Remove-Item -Recurse -Force backend\.venv -ErrorAction SilentlyContinue
+
+# Step 4: Initialize a new git repository
+git init
+
+# Step 5: Add all files (except those in .gitignore)
+git add .
+
+# Step 6: Check what's being added (should NOT include .venv)
+git status
+
+# Step 7: Create initial commit
+git commit -m "Initial commit - clean repository without venv"
+
+# Step 8: Connect to GitHub and force push
+git remote add origin https://github.com/VENKATAPRASANNA16/ai-synapse-ocr.git
+git branch -M main
+git push -u origin main --force

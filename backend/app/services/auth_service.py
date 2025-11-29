@@ -6,7 +6,6 @@ import logging
 
 from ..models.user import UserCreate, UserInDB, UserRole, Token
 from ..utils.security import get_password_hash, verify_password, create_access_token
-from ..utils.database import get_database
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -18,28 +17,43 @@ class AuthService:
     
     async def create_user(self, user: UserCreate) -> UserInDB:
         """Create a new user"""
-        # Check if user already exists
-        existing_user = await self.users_collection.find_one({"email": user.email})
-        if existing_user:
+        try:
+            existing_user = await self.users_collection.find_one({"email": user.email})
+            if existing_user:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email already registered"
+                    )
+            if hasattr(user, 'model_dump'):
+                    user_dict = user.model_dump(by_alias=False)
+            else:
+                    user_dict = user.dict(by_alias=False)
+            if isinstance(user_dict.get('role'), UserRole):
+                user_dict['role'] = user_dict['role'].value
+            password = user_dict.pop("password")
+            user_dict["hashed_password"] = get_password_hash(password)
+            user_dict["created_at"] = datetime.utcnow()
+            user_dict["updated_at"] = datetime.utcnow()
+            user_dict["is_active"] = True
+            user_dict["upload_count"] = 0
+            user_dict["query_count"] = 0
+            user_dict["storage_used"] = 0
+            result = await self.users_collection.insert_one(user_dict)
+            created_user = await self.users_collection.find_one({"_id": result.inserted_id})
+            if not created_user:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to retrieve created user from database"
+                    )
+            created_user["_id"] = str(created_user["_id"])
+            return UserInDB(**created_user)
+        except HTTPException:
+            raise
+        except Exception as e:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered"
-            )
-        
-        # Create user document
-        user_dict = user.dict()
-        user_dict["hashed_password"] = get_password_hash(user_dict.pop("password"))
-        user_dict["created_at"] = datetime.utcnow()
-        user_dict["updated_at"] = datetime.utcnow()
-        user_dict["is_active"] = True
-        user_dict["upload_count"] = 0
-        user_dict["query_count"] = 0
-        user_dict["storage_used"] = 0
-        
-        result = await self.users_collection.insert_one(user_dict)
-        user_dict["_id"] = str(result.inserted_id)
-        
-        return UserInDB(**user_dict)
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to create user: {str(e)}"
+                )
     
     async def authenticate_user(self, email: str, password: str) -> Optional[UserInDB]:
         """Authenticate a user"""
@@ -61,7 +75,13 @@ class AuthService:
     
     async def get_user_by_id(self, user_id: str) -> Optional[UserInDB]:
         """Get user by ID"""
-        user = await self.users_collection.find_one({"_id": user_id})
+        print(f"Looking for user with ID: {user_id}")
+        try:
+            from bson import ObjectId
+            user = await self.users_collection.find_one({"_id": ObjectId(user_id)})
+        except:
+             user = await self.users_collection.find_one({"_id": user_id})
+        print(f"User found in DB: {user is not None}")
         if user:
             user["_id"] = str(user["_id"])
             return UserInDB(**user)
@@ -87,7 +107,7 @@ class AuthService:
             data={
                 "sub": user.id,
                 "email": user.email,
-                "role": user.role.value
+                "role": user.role if isinstance(user.role, str) else user.role.value
             },
             expires_delta=expires_delta
         )

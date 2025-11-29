@@ -1,26 +1,22 @@
 FROM python:3.10-slim
 
-# Install system dependencies
+# Install system dependencies including libgomp
 RUN apt-get update && apt-get install -y \
-    tesseract-ocr \
-    libtesseract-dev \
-    poppler-utils \
-    libgl1 \
+    libgomp1 \
     libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgl1 \
     && rm -rf /var/lib/apt/lists/*
-
-
-
 
 WORKDIR /app
 
+# Copy and install Python dependencies
 COPY requirements.txt .
-
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install paddlepaddle manually
-RUN pip install paddlepaddle==2.6.1 -i https://mirror.baidu.com/pypi/simple
-
+# Copy application code
 COPY . .
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

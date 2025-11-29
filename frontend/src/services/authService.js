@@ -1,59 +1,88 @@
 import api from './api';
 
 export const authService = {
-  async register(userData) {
-    const response = await api.post('/auth/register', userData);
-    return response.data;
-  },
-
   async login(email, password) {
+    try {
+    // Create FormData for OAuth2PasswordRequestForm
     const formData = new FormData();
     formData.append('username', email);
     formData.append('password', password);
-
+    
     const response = await api.post('/auth/login', formData, {
       headers: {
-        'Content-Type': 'multipart/form-data',
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
     });
+    
+    console.log('Login response:', response.data);
+    
+    // Store the token
+    if (response.data.access_token) {
+      localStorage.setItem('token', response.data.access_token);
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Login error:', error);
+    throw new Error(error.response?.data?.detail || 'Login failed');
+  }
+},
 
-    const { access_token } = response.data;
-    localStorage.setItem('access_token', access_token);
-
-    // Get user info
-    const userInfo = await this.getCurrentUser();
-    localStorage.setItem('user', JSON.stringify(userInfo));
-
-    return { token: access_token, user: userInfo };
-  },
-
-  async logout() {
+  async register(userData) {
     try {
-      await api.post('/auth/logout');
+      // Transform the data to match backend expectations
+      const response = await api.post('/auth/register', {
+        full_name: userData.fullName || userData.name,
+        email: userData.email,
+        password: userData.password,
+      });
+      return response.data;
     } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('user');
+      // FastAPI returns errors in 'detail' field
+      const errorMessage = error.response?.data?.detail;
+      
+      // If detail is an array (validation errors), extract the message
+      if (Array.isArray(errorMessage)) {
+        throw new Error(errorMessage.map(err => err.msg).join(', '));
+      }
+      
+      throw new Error(errorMessage || 'Registration failed');
     }
   },
 
-  async getCurrentUser() {
-    const response = await api.get('/auth/me');
-    return response.data;
+  async verifyToken(token) {
+    try {
+      const response = await api.get('/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error('Token verification failed');
+    }
   },
 
-  async createGuestSession() {
-    const response = await api.get('/auth/guest-session');
-    return response.data;
+  async forgotPassword(email) {
+    try {
+      const response = await api.post('/auth/forgot-password', { email });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Request failed');
+    }
   },
 
-  isAuthenticated() {
-    return !!localStorage.getItem('access_token');
+  async resetPassword(token, newPassword) {
+    try {
+      const response = await api.post('/auth/reset-password', {
+        token,
+        newPassword,
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Password reset failed');
+    }
   },
 
-  getStoredUser() {
-    const user = localStorage.getItem('user');
-    return user ? JSON.parse(user) : null;
-  }
+  logout() {
+    localStorage.removeItem('token');
+  },
 };

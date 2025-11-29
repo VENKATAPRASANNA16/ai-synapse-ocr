@@ -2,38 +2,63 @@ import api from './api';
 
 export const analyticsService = {
   async getDashboardStats() {
-    const response = await api.get('/analytics/dashboard');
-    return response.data;
+    try {
+      const response = await api.get('/analytics/dashboard');
+      return response.data;
+    } catch (error) {
+      throw new Error('Failed to get dashboard stats');
+    }
   },
 
-  async getOCRPerformance(days = 30) {
-    const response = await api.get('/analytics/ocr-performance', {
-      params: { days }
-    });
-    return response.data;
+  async getProcessingMetrics(timeRange = '30d') {
+    try {
+      const response = await api.get('/analytics/processing-metrics', {
+        params: { timeRange },
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error('Failed to get processing metrics');
+    }
   },
 
-  async getUserActivity(limit = 50) {
-    const response = await api.get('/analytics/user-activity', {
-      params: { limit }
-    });
-    return response.data;
+  async getUserActivity(userId) {
+    try {
+      const response = await api.get(`/analytics/user-activity/${userId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error('Failed to get user activity');
+    }
   },
 
-  async getDocumentTypes() {
-    const response = await api.get('/analytics/document-types');
-    return response.data;
+  async getAccuracyTrends(timeRange = '30d') {
+    try {
+      const response = await api.get('/analytics/accuracy-trends', {
+        params: { timeRange },
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error('Failed to get accuracy trends');
+    }
   },
 
-  async getErrorAnalysis(days = 7) {
-    const response = await api.get('/analytics/error-analysis', {
-      params: { days }
-    });
-    return response.data;
+  async getDocumentTypeDistribution() {
+    try {
+      const response = await api.get('/analytics/document-types');
+      return response.data;
+    } catch (error) {
+      throw new Error('Failed to get document type distribution');
+    }
   },
 
-  async getMyStats() {
-    const response = await api.get('/analytics/my-stats');
-    return response.data;
-  }
+  async exportReport(reportType, format = 'pdf') {
+    try {
+      const response = await api.get('/analytics/export', {
+        params: { reportType, format },
+        responseType: 'blob',
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error('Failed to export report');
+    }
+  },
 };

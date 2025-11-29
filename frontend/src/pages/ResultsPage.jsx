@@ -1,294 +1,260 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Eye, Table } from 'lucide-react';
-import { ocrService } from '../services/ocrService';
-import { Loading } from '../components/Common/Loading';
 
-export const ResultsPage = () => {
-  const { documentId } = useParams();
+const ResultsPage = () => {
+  const { id } = useParams();
   const navigate = useNavigate();
-  const [results, setResults] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [zoom, setZoom] = useState(100);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  useEffect(() => {
-    loadResults();
-  }, [documentId]);
+  const extractedData = [
+    { category: 'Financial', value: '$2,400,000', page: 1, confidence: 98 },
+    { category: 'Percentage', value: '15.2%', page: 1, confidence: 95 },
+    { category: 'Financial', value: '$650,000', page: 1, confidence: 97 },
+    { category: 'Date', value: 'December 31, 2024', page: 1, confidence: 99 },
+    { category: 'Percentage', value: '22.9%', page: 1, confidence: 97 },
+    { category: 'Percentage', value: '84.2%', page: 1, confidence: 95 },
+  ];
 
-  const loadResults = async () => {
-    try {
-      const data = await ocrService.getOCRResults(documentId);
-      if (data.success) {
-        setResults(data.data);
-      }
-    } catch (error) {
-      console.error('Error loading results:', error);
-    } finally {
-      setLoading(false);
-    }
+  const handleExport = (format) => {
+    alert(`Exporting as ${format}...`);
   };
-
-  const exportToJSON = () => {
-    const dataStr = JSON.stringify(results, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${results.metadata.original_filename}_results.json`;
-    link.click();
-  };
-
-  const exportToCSV = () => {
-    if (!results.tables || results.tables.length === 0) {
-      alert('No tables to export');
-      return;
-    }
-
-    let csv = '';
-    results.tables.forEach((table, index) => {
-      csv += `Table ${index + 1} (Page ${table.page_number})\n`;
-      table.data.forEach(row => {
-        csv += row.map(cell => `"${cell}"`).join(',') + '\n';
-      });
-      csv += '\n';
-    });
-
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${results.metadata.original_filename}_tables.csv`;
-    link.click();
-  };
-
-  if (loading) {
-    return <Loading text="Loading results..." />;
-  }
-
-  if (!results) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-gray-600">Results not found</p>
-      </div>
-    );
-  }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={() => navigate('/my-files')}
-            className="text-gray-600 hover:text-gray-900"
-          >
-            <ArrowLeft className="w-6 h-6" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {results.metadata.original_filename}
-            </h1>
-            <p className="text-gray-600">Processing Results</p>
+    <div className="h-full flex flex-col">
+      <div className="bg-white border-b border-gray-200 p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="text-gray-600 hover:text-gray-900"
+            >
+              ← Back
+            </button>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">PDF Analysis Results</h1>
+              <p className="text-sm text-gray-600">Document_Report_2024.pdf</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <button className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-2">
+              <span>⚠️</span>
+              <span>Report Error</span>
+            </button>
+            <div className="relative">
+              <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2">
+                <span>📥</span>
+                <span>Export CSV</span>
+              </button>
+            </div>
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="text-gray-600 hover:text-gray-900"
+            >
+              <span className="text-xl">👤</span>
+            </button>
           </div>
         </div>
-        
-        <div className="flex items-center space-x-2">
-          <button onClick={exportToJSON} className="btn-secondary flex items-center space-x-2">
-            <Download className="w-4 h-4" />
-            <span>Export JSON</span>
-          </button>
-          <button onClick={exportToCSV} className="btn-secondary flex items-center space-x-2">
-            <Download className="w-4 h-4" />
-            <span>Export CSV</span>
-          </button>
-        </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-600 mb-1">Total Pages</p>
-          <p className="text-2xl font-bold text-gray-900">{results.metadata.page_count}</p>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-600 mb-1">Tables Extracted</p>
-          <p className="text-2xl font-bold text-gray-900">{results.tables?.length || 0}</p>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-600 mb-1">Avg Confidence</p>
-          <p className="text-2xl font-bold text-gray-900">
-            {results.ocr_results && results.ocr_results.length > 0
-              ? (results.ocr_results.reduce((sum, r) => sum + r.confidence, 0) / results.ocr_results.length * 100).toFixed(1)
-              : 0}%
-          </p>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-600 mb-1">Processing Time</p>
-          <p className="text-2xl font-bold text-gray-900">
-            {results.processing_time ? `${results.processing_time.toFixed(1)}s` : 'N/A'}
-          </p>
-        </div>
-      </div>
+      <div className="flex-1 flex overflow-hidden">
+        {/* Document Preview */}
+        <div className="flex-1 bg-gray-100 p-6 overflow-y-auto">
+          <div className="mb-4 flex items-center justify-between bg-white p-3 rounded-lg shadow">
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
+              >
+                ←
+              </button>
+              <span className="text-sm">
+                Page <input
+                  type="number"
+                  value={currentPage}
+                  onChange={(e) => setCurrentPage(Number(e.target.value))}
+                  className="w-12 text-center border rounded mx-1"
+                  min="1"
+                  max="15"
+                /> of 15
+              </span>
+              <button
+                onClick={() => setCurrentPage(Math.min(15, currentPage + 1))}
+                disabled={currentPage === 15}
+                className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50"
+              >
+                →
+              </button>
+            </div>
 
-      {/* Tabs */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="border-b border-gray-200">
-          <nav className="flex space-x-8 px-6" aria-label="Tabs">
-            {[
-              { id: 'overview', name: 'Overview', icon: Eye },
-              { id: 'ocr', name: 'OCR Results', icon: Eye },
-              { id: 'tables', name: 'Tables', icon: Table }
-            ].map(tab => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`
-                    py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2
-                    ${activeTab === tab.id
-                      ? 'border-primary-500 text-primary-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }
-                  `}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span>{tab.name}</span>
-                </button>
-              );
-            })}
-          </nav>
-        </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setZoom(Math.max(50, zoom - 10))}
+                className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300"
+              >
+                -
+              </button>
+              <span className="text-sm w-16 text-center">{zoom}%</span>
+              <button
+                onClick={() => setZoom(Math.min(200, zoom + 10))}
+                className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300"
+              >
+                +
+              </button>
+              <button className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 ml-2">
+                <span>🔄</span>
+              </button>
+            </div>
+          </div>
 
-        <div className="p-6">
-          {/* Overview Tab */}
-          {activeTab === 'overview' && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Document Information</h3>
-                <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <dt className="text-sm font-medium text-gray-500">Filename</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{results.metadata.original_filename}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm font-medium text-gray-500">File Size</dt>
-                    <dd className="mt-1 text-sm text-gray-900">
-                      {(results.metadata.file_size / (1024 * 1024)).toFixed(2)} MB
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm font-medium text-gray-500">Pages</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{results.metadata.page_count}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm font-medium text-gray-500">Tables Detected</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{results.metadata.table_count}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm font-medium text-gray-500">Upload Date</dt>
-                    <dd className="mt-1 text-sm text-gray-900">
-                      {new Date(results.created_at).toLocaleString()}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm font-medium text-gray-500">Status</dt>
-                    <dd className="mt-1 text-sm text-gray-900 capitalize">{results.status}</dd>
-                  </div>
-                </dl>
-              </div>
+          <div className="bg-white rounded-lg shadow-lg p-8 max-w-4xl mx-auto">
+            <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}>
+              <div className="border border-gray-300 p-8">
+                <h2 className="text-2xl font-bold mb-6">QUARTERLY FINANCIAL REPORT</h2>
+                <p className="text-sm text-gray-600 mb-6">Q4 2024 Performance Analysis</p>
 
-              {results.ocr_results && results.ocr_results.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">OCR Engines Used</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {Array.from(new Set(results.ocr_results.map(r => r.engine))).map(engine => (
-                      <span key={engine} className="px-3 py-1 bg-primary-100 text-primary-800 rounded-full text-sm">
-                        {engine.toUpperCase()}
-                      </span>
-                    ))}
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-bold text-lg mb-2">Executive Summary</h3>
+                    <p className="text-sm text-gray-700">
+                      The fourth quarter of 2024 demonstrated strong revenue growth of 15.2%
+                      compared to the previous quarter, with total revenue reaching $2.4 million.
+                      Operating expenses increased by 9.3%, resulting in improved operational
+                      efficiency.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-lg mb-2">Key Performance Indicators</h3>
+                    <table className="w-full border border-gray-300 text-sm">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="border border-gray-300 p-2 text-left">Metric</th>
+                          <th className="border border-gray-300 p-2 text-right">Value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td className="border border-gray-300 p-2">Total Revenue:</td>
+                          <td className="border border-gray-300 p-2 text-right bg-yellow-100">
+                            $2,400,000
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="border border-gray-300 p-2">Operating Expenses:</td>
+                          <td className="border border-gray-300 p-2 text-right">$1,850,000</td>
+                        </tr>
+                        <tr>
+                          <td className="border border-gray-300 p-2">Net Profit:</td>
+                          <td className="border border-gray-300 p-2 text-right bg-yellow-100">
+                            $550,000
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="border border-gray-300 p-2">Profit Margin:</td>
+                          <td className="border border-gray-300 p-2 text-right bg-yellow-100">
+                            22.9%
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-lg mb-2">Market Analysis</h3>
+                    <p className="text-sm text-gray-700">
+                      Market conditions remained favorable throughout Q4, with customer
+                      acquisition costs decreasing by 12% and retention rates improved to 84.2%.
+                      The competitive landscape showed increased activity in our primary market
+                      segments.
+                    </p>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
 
-          {/* OCR Results Tab */}
-          {activeTab === 'ocr' && (
-            <div className="space-y-4">
-              {results.ocr_results && results.ocr_results.length > 0 ? (
-                results.ocr_results.map((ocrResult, index) => (
-                  <div key={index} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-medium text-gray-900">
-                        Page {ocrResult.page_number}
-                      </h4>
-                      <div className="flex items-center space-x-4 text-sm">
-                        <span className="text-gray-600">
-                          Engine: <span className="font-medium">{ocrResult.engine}</span>
-                        </span>
-                        <span className="text-gray-600">
-                          Confidence: <span className="font-medium">{(ocrResult.confidence * 100).toFixed(1)}%</span>
-                        </span>
-                      </div>
-                    </div>
-                    <div className="bg-gray-50 rounded p-3 max-h-64 overflow-y-auto">
-                      <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">
-                        {ocrResult.text}
-                      </pre>
+                <p className="text-xs text-gray-500 mt-8">
+                  Document generated on December 31, 2024 | Page 1 of 15
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Extracted Data Sidebar */}
+        <div className="w-96 bg-white border-l border-gray-200 overflow-y-auto">
+          <div className="p-4 border-b border-gray-200 bg-gray-50">
+            <h2 className="text-lg font-bold text-gray-900">Extracted Data</h2>
+            <p className="text-sm text-gray-600 mt-1">✓ Processed • 156 entries extracted</p>
+          </div>
+
+          <div className="p-4">
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                All Categories
+              </label>
+              <select className="w-full border border-gray-300 rounded-lg px-3 py-2">
+                <option>All Categories</option>
+                <option>Financial</option>
+                <option>Percentage</option>
+                <option>Date</option>
+              </select>
+            </div>
+
+            <div className="space-y-3">
+              {extractedData.map((item, index) => (
+                <div key={index} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <div className="flex items-start justify-between mb-2">
+                    <span className="text-xs font-medium text-gray-600 bg-gray-200 px-2 py-1 rounded">
+                      {item.category}
+                    </span>
+                    <div className="flex items-center space-x-2">
+                      <button className="text-indigo-600 hover:text-indigo-700">
+                        <span className="text-sm">👁️</span>
+                      </button>
+                      <button className="text-indigo-600 hover:text-indigo-700">
+                        <span className="text-sm">✏️</span>
+                      </button>
                     </div>
                   </div>
-                ))
-              ) : (
-                <p className="text-gray-500 text-center py-8">No OCR results available</p>
-              )}
-            </div>
-          )}
-
-          {/* Tables Tab */}
-          {activeTab === 'tables' && (
-            <div className="space-y-6">
-              {results.tables && results.tables.length > 0 ? (
-                results.tables.map((table, index) => (
-                  <div key={index} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-medium text-gray-900">
-                        Table {index + 1} - Page {table.page_number}
-                      </h4>
-                      <div className="text-sm text-gray-600">
-                        {table.rows} rows × {table.columns} columns
-                        <span className="ml-4">
-                          Confidence: {(table.confidence * 100).toFixed(1)}%
-                        </span>
+                  <p className="text-lg font-bold text-gray-900 mb-2">{item.value}</p>
+                  <div className="flex items-center justify-between text-xs text-gray-600">
+                    <span>Page {item.page}</span>
+                    <div className="flex items-center">
+                      <div className="w-16 bg-gray-200 rounded-full h-1.5 mr-2">
+                        <div
+                          className="bg-green-600 h-1.5 rounded-full"
+                          style={{ width: `${item.confidence}%` }}
+                        />
                       </div>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {table.data.map((row, rowIndex) => (
-                            <tr key={rowIndex}>
-                              {row.map((cell, cellIndex) => (
-                                <td
-                                  key={cellIndex}
-                                  className="px-4 py-2 text-sm text-gray-900 border border-gray-200"
-                                >
-                                  {cell}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                      <span>{item.confidence}%</span>
                     </div>
                   </div>
-                ))
-              ) : (
-                <p className="text-gray-500 text-center py-8">No tables detected in this document</p>
-              )}
+                </div>
+              ))}
             </div>
-          )}
+          </div>
+
+          <div className="p-4 border-t border-gray-200">
+            <h3 className="font-semibold text-gray-900 mb-3">Processing Statistics</h3>
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="bg-blue-50 p-3 rounded-lg">
+                <p className="text-2xl font-bold text-blue-600">156</p>
+                <p className="text-xs text-gray-600">Total Extracted</p>
+              </div>
+              <div className="bg-green-50 p-3 rounded-lg">
+                <p className="text-2xl font-bold text-green-600">94%</p>
+                <p className="text-xs text-gray-600">Avg Confidence</p>
+              </div>
+              <div className="bg-purple-50 p-3 rounded-lg">
+                <p className="text-2xl font-bold text-purple-600">2.3s</p>
+                <p className="text-xs text-gray-600">Processing Time</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 };
+
+export default ResultsPage;

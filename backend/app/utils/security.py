@@ -7,13 +7,33 @@ from ..config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against a hash"""
-    return pwd_context.verify(plain_password, hashed_password)
-
 def get_password_hash(password: str) -> str:
-    """Hash a password"""
-    return pwd_context.hash(password)
+    """Hash a password for storing"""
+    try:
+        # Make absolutely sure it's a string
+        password_str = str(password)
+        
+        # Truncate to 72 characters
+        if len(password_str) > 72:
+            password_str = password_str[:72]
+        
+        # Hash it
+        return pwd_context.hash(password_str)
+    except Exception as e:
+        print(f"Error in get_password_hash: {e}")
+        print(f"Password type: {type(password)}")
+        print(f"Password value: {repr(password)}")
+        raise
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a password against its hash"""
+    if isinstance(plain_password, bytes):
+        plain_password = plain_password.decode('utf-8')
+    
+    # Truncate to 72 characters
+    plain_password = plain_password[:72]
+    
+    return pwd_context.verify(plain_password, hashed_password)
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     """Create a JWT access token"""

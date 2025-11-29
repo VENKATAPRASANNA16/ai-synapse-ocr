@@ -1,7 +1,16 @@
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
 import { authService } from '../services/authService';
 
-export const AuthContext = createContext(null);
+// Export the context so hooks can import it
+export const AuthContext = createContext();
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+  return context;
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -9,79 +18,85 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    // Check if user is logged in on mount
-    const initAuth = () => {
-      const storedUser = authService.getStoredUser();
-      const isAuth = authService.isAuthenticated();
+    checkAuth();
+  }, []);
 
-      if (isAuth && storedUser) {
-        setUser(storedUser);
+  const checkAuth = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (token) {
+        const userData = await authService.verifyToken(token);
+        setUser(userData);
         setIsAuthenticated(true);
       }
+    } catch (error) {
+      console.error('Auth check failed:', error);
+      localStorage.removeItem('token');
+    } finally {
       setLoading(false);
-    };
-
-    initAuth();
-  }, []);
+    }
+  };
 
   const login = async (email, password) => {
-    try {
-      const { user: userData } = await authService.login(email, password);
+  try {
+    console.log('Attempting login with email:', email);
+    const response = await authService.login(email, password);
+    console.log('Login response:', response);
+    
+    // FastAPI OAuth2 returns: { access_token, token_type }
+    if (response.access_token) {
+      localStorage.setItem('token', response.access_token);
+      console.log('Token stored, fetching user data...');
+      
+      // Fetch user data after login
+      const userData = await authService.verifyToken(response.access_token);
+      console.log('User data fetched:', userData);
+      
       setUser(userData);
       setIsAuthenticated(true);
+      
       return { success: true };
-    } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.detail || 'Login failed'
-      };
+    } else {
+      console.error('No access_token in response:', response);
+      return { success: false, error: 'Invalid login response' };
     }
-  };
+  } catch (error) {
+    console.error('Login error:', error);
+    return { success: false, error: error.message };
+  }
+};
 
-  const register = async (userData) => {
-    try {
-      await authService.register(userData);
+const register = async (userData) => {
+  try {
+    console.log('Attempting registration...');
+    const response = await authService.register(userData);
+    console.log('Registration response:', response);
+    
+    // Registration returns user data directly: { email, fullName, role, _id, ... }
+    // After registration, we need to login to get a token
+    console.log('Registration successful, now logging in...');
+    const loginResult = await login(userData.email, userData.password);
+    console.log('Login after registration result:', loginResult);
+    
+    if (loginResult.success) {
       return { success: true };
-    } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.detail || 'Registration failed'
-      };
+    } else {
+      return { success: false, error: 'Registration successful but login failed: ' + loginResult.error };
     }
-  };
-
-  const logout = useCallback(async () => {
-    await authService.logout();
+  } catch (error) {
+    console.error('Registration error:', error);
+    return { success: false, error: error.message };
+  }
+};
+  const logout = () => {
+    authService.logout();
     setUser(null);
     setIsAuthenticated(false);
-  }, []);
-
-  const createGuestSession = async () => {
-    try {
-      const guestData = await authService.createGuestSession();
-      setUser({
-        role: 'guest',
-        ...guestData
-      });
-      setIsAuthenticated(false);
-      return { success: true };
-    } catch (error) {
-      return {
-        success: false,
-        error: 'Failed to create guest session'
-      };
-    }
+    localStorage.removeItem('token');
   };
 
-  const refreshUser = async () => {
-    try {
-      const userData = await authService.getCurrentUser();
-      setUser(userData);
-      localStorage.setItem('user', JSON.stringify(userData));
-    } catch (error) {
-      console.error('Failed to refresh user:', error);
-      logout();
-    }
+  const updateUser = (userData) => {
+    setUser((prev) => ({ ...prev, ...userData }));
   };
 
   const value = {
@@ -91,8 +106,8 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
-    createGuestSession,
-    refreshUser
+    updateUser,
+    checkAuth,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

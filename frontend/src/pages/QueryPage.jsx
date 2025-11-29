@@ -1,152 +1,199 @@
-import React, { useState, useEffect } from 'react';
-import { ChatBox } from '../components/Query/ChatBox';
-import { ResultDisplay } from '../components/Query/ResultDisplay';
-import { useQuery } from '../hooks/useQuery';
-import { uploadService } from '../services/uploadService';
-import { MessageSquare, FileText } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useQuery } from '../context/QueryContext';
 
-export const QueryPage = () => {
-  const { querying, result, error, executeQuery } = useQuery();
-  const [documents, setDocuments] = useState([]);
-  const [selectedDocs, setSelectedDocs] = useState([]);
-  const [queryHistory, setQueryHistory] = useState([]);
+const QueryPage = () => {
+  const [message, setMessage] = useState('');
+  const [documents, setDocuments] = useState([
+    { id: 1, name: 'Research_Report_2024.pdf', pages: 42 },
+    { id: 2, name: 'Project_Analysis.docx', pages: 23 },
+    { id: 3, name: 'Data_Summary.xlsx', pages: 5 },
+  ]);
+  const { currentConversation, sendQuery, isProcessing, createConversation } = useQuery();
+  const messagesEndRef = useRef(null);
 
   useEffect(() => {
-    loadDocuments();
+    if (!currentConversation) {
+      createConversation(documents);
+    }
   }, []);
 
-  const loadDocuments = async () => {
-    try {
-      const docs = await uploadService.getMyDocuments(0, 50);
-      const completedDocs = docs.filter(doc => doc.status === 'completed');
-      setDocuments(completedDocs);
-    } catch (error) {
-      console.error('Error loading documents:', error);
-    }
+  useEffect(() => {
+    scrollToBottom();
+  }, [currentConversation?.messages]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleQuery = async (query) => {
-    const docIds = selectedDocs.length > 0 ? selectedDocs : null;
-    const result = await executeQuery(query, docIds);
-    
-    if (result.success) {
-      setQueryHistory([result.data, ...queryHistory]);
-    }
-  };
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!message.trim() || isProcessing) return;
 
-  const toggleDocument = (docId) => {
-    setSelectedDocs(prev => 
-      prev.includes(docId) 
-        ? prev.filter(id => id !== docId)
-        : [...prev, docId]
-    );
+    const query = message;
+    setMessage('');
+    await sendQuery(query);
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex items-center space-x-3 mb-6">
-          <MessageSquare className="w-8 h-8 text-primary-500" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Query Documents</h1>
-            <p className="text-gray-600">Ask questions about your processed documents</p>
-          </div>
-        </div>
-
-        {/* Document Filter */}
-        {documents.length > 0 && (
-          <div className="mb-6">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">
-              Filter by documents (optional):
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setSelectedDocs([])}
-                className={`px-3 py-1 rounded-full text-sm ${
-                  selectedDocs.length === 0
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                All Documents ({documents.length})
-              </button>
-              {documents.map(doc => (
-                <button
-                  key={doc._id}
-                  onClick={() => toggleDocument(doc._id)}
-                  className={`px-3 py-1 rounded-full text-sm flex items-center space-x-1 ${
-                    selectedDocs.includes(doc._id)
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <FileText className="w-3 h-3" />
-                  <span className="truncate max-w-xs">
-                    {doc.metadata.original_filename}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Chat Interface */}
-        <ChatBox onSubmit={handleQuery} loading={querying} />
-
-        {error && (
-          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm text-red-600">{error}</p>
-          </div>
-        )}
+    <div className="h-full flex flex-col">
+      <div className="bg-white border-b border-gray-200 p-4">
+        <h1 className="text-2xl font-bold text-gray-900">AI Document Analysis Chat</h1>
+        <p className="text-sm text-gray-600 mt-1">
+          Ask questions about your connected documents
+        </p>
       </div>
 
-      {/* Current Result */}
-      {result && (
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <ResultDisplay result={result} />
-        </div>
-      )}
-
-      {/* Query History */}
-      {queryHistory.length > 1 && (
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Previous Queries</h2>
-          <div className="space-y-4">
-            {queryHistory.slice(1).map((item, index) => (
-              <div key={index} className="border-l-4 border-gray-300 pl-4 py-2">
-                <p className="text-sm font-medium text-gray-900 mb-1">{item.query}</p>
-                <p className="text-sm text-gray-600 line-clamp-2">{item.answer}</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {item.citations?.length || 0} sources • {(item.confidence * 100).toFixed(0)}% confidence
-                </p>
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar - Connected Documents */}
+        <div className="w-80 bg-white border-r border-gray-200 p-4 overflow-y-auto">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Connected Documents</h2>
+          <div className="space-y-2">
+            {documents.map((doc) => (
+              <div key={doc.id} className="p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-start space-x-3">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <span className="text-xl">📄</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{doc.name}</p>
+                    <p className="text-xs text-gray-500">{doc.pages} pages</p>
+                  </div>
+                  <button className="text-green-600 hover:text-green-700">
+                    <span className="text-xl">✓</span>
+                  </button>
+                </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
 
-      {/* Help Section */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-blue-900 mb-3">Query Tips</h3>
-        <ul className="space-y-2 text-sm text-blue-800">
-          <li className="flex items-start">
-            <span className="mr-2">💡</span>
-            <span>Ask specific questions about information in your documents</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">💡</span>
-            <span>Reference table data, dates, numbers, and specific sections</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">💡</span>
-            <span>Filter by specific documents for more focused results</span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">💡</span>
-            <span>Use natural language - no need for special syntax</span>
-          </li>
-        </ul>
+          <button className="mt-4 w-full py-2 px-4 border border-indigo-600 text-indigo-600 rounded-lg hover:bg-indigo-50 text-sm font-medium">
+            + Add Document
+          </button>
+        </div>
+
+        {/* Chat Area */}
+        <div className="flex-1 flex flex-col">
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {/* Welcome Message */}
+            {(!currentConversation?.messages || currentConversation.messages.length === 0) && (
+              <div className="text-center py-12">
+                <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-4xl">💬</span>
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Start a conversation</h3>
+                <p className="text-gray-600 max-w-md mx-auto">
+                  Ask questions about your documents and get intelligent answers with citations
+                  and references
+                </p>
+              </div>
+            )}
+
+            {/* Messages */}
+            {currentConversation?.messages.map((msg, index) => (
+              <div
+                key={index}
+                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-3xl ${
+                    msg.role === 'user'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-white border border-gray-200'
+                  } rounded-lg p-4`}
+                >
+                  {msg.role === 'assistant' && (
+                    <div className="flex items-center space-x-2 mb-2">
+                      <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center">
+                        <span className="text-sm">🤖</span>
+                      </div>
+                      <span className="text-xs font-medium text-gray-700">AI Assistant</span>
+                    </div>
+                  )}
+                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+
+                  {msg.citations && msg.citations.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <p className="text-xs font-medium text-gray-700 mb-2">Citations:</p>
+                      <div className="space-y-1">
+                        {msg.citations.map((citation, idx) => (
+                          <div key={idx} className="text-xs text-gray-600 flex items-start">
+                            <span className="mr-1">📌</span>
+                            <span>
+                              {citation.document} - Page {citation.page}, Section {citation.section}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-xs mt-2 opacity-70">
+                    {new Date(msg.timestamp).toLocaleTimeString()}
+                  </p>
+                </div>
+              </div>
+            ))}
+
+            {isProcessing && (
+              <div className="flex justify-start">
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center space-x-2">
+                    <div className="animate-spin w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full" />
+                    <span className="text-sm text-gray-600">AI is thinking...</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input Area */}
+          <div className="border-t border-gray-200 bg-white p-4">
+            <div className="mb-2 flex items-center justify-between text-xs text-gray-500">
+              <span>3 documents connected</span>
+              <div className="flex items-center space-x-4">
+                <button className="hover:text-indigo-600">Export Chat</button>
+                <button className="hover:text-indigo-600">Start Result</button>
+              </div>
+            </div>
+            <form onSubmit={handleSubmit} className="flex space-x-3">
+              <button
+                type="button"
+                className="p-3 bg-gray-100 rounded-lg hover:bg-gray-200 flex-shrink-0"
+              >
+                <span className="text-xl">📎</span>
+              </button>
+              <button
+                type="button"
+                className="p-3 bg-gray-100 rounded-lg hover:bg-gray-200 flex-shrink-0"
+              >
+                <span className="text-xl">🎤</span>
+              </button>
+              <input
+                type="text"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Ask a question about your documents... (Login required)"
+                disabled={isProcessing}
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent disabled:bg-gray-100"
+              />
+              <button
+                type="submit"
+                disabled={!message.trim() || isProcessing}
+                className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+              >
+                Send
+              </button>
+            </form>
+            <p className="text-xs text-gray-500 mt-2 text-center">
+              Press Enter to send. Shift+Enter for new line
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
 };
+
+export default QueryPage;

@@ -1,78 +1,68 @@
-version: '3.8'
-
 services:
-  # MongoDB Database
-  mongodb:
+  mongo:
     image: mongo:7.0
-    container_name: ai-synapse-mongodb
-    restart: unless-stopped
+    container_name: ai-synapse-mongo
+    restart: always
     ports:
       - "27017:27017"
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: aisynapse2025
-      MONGO_INITDB_DATABASE: ai_synapse_ocr
+    command: ["mongod", "--bind_ip_all", "--noauth"]
     volumes:
-      - mongodb_data:/data/db
-      - mongodb_config:/data/configdb
+      - mongo-data:/data/db
     networks:
       - ai-synapse-network
 
-  # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: ai-synapse-redis
-    restart: unless-stopped
     ports:
       - "6379:6379"
+    command: redis-server --appendonly yes
     volumes:
-      - redis_data:/data
+      - redis-data:/data
     networks:
       - ai-synapse-network
 
-  # FastAPI Backend
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    build: ./backend
     container_name: ai-synapse-backend
     restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      - DEBUG=False
-      - SECRET_KEY=your-secret-key-change-in-production
-      - MONGODB_URL=mongodb://admin:aisynapse2025@mongodb:27017/ai_synapse_ocr?authSource=admin
-      - REDIS_URL=redis://redis:6379/0
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - CORS_ORIGINS=http://localhost:3000,http://localhost
-    volumes:
-      - ./backend/uploads:/app/uploads
+      # Update MongoDB connection - no auth
+      - MONGODB_URL=mongodb://ai-synapse-mongo:27017/ai_synapse_ocr
+      - DATABASE_NAME=ai_synapse_ocr
     depends_on:
-      - mongodb
-      - redis
+      - ai-synapse-mongo
+      - ai-synapse-redis
+    volumes:
+      - ./backend:/app
+      - ./uploads:/app/uploads
     networks:
       - ai-synapse-network
 
-  # React Frontend
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: ai-synapse-frontend
-    restart: unless-stopped
     ports:
-      - "3000:80"
+      - "3000:3000"  # Changed from 5000:80 to 3000:3000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000/api
+      - CHOKIDAR_USEPOLLING=true
     depends_on:
       - backend
     networks:
       - ai-synapse-network
 
-volumes:
-  mongodb_data:
-  mongodb_config:
-  redis_data:
-
 networks:
   ai-synapse-network:
     driver: bridge
+
+volumes:
+  mongo-data:
+  redis-data:
