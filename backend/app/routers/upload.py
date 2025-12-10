@@ -4,6 +4,7 @@ import aiofiles
 import os
 from datetime import datetime
 import uuid
+from bson import ObjectId
 
 from ..models.document import DocumentCreate, DocumentResponse, DocumentMetadata, DocumentStatus
 from ..models.user import UserInDB, UserRole
@@ -15,24 +16,26 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/upload", tags=["Upload"])
+# IMPORTANT: Remove /api/upload from here since it's added in main.py
+router = APIRouter()
 
 def validate_file(filename: str, file_size: int):
     """Validate file type and size"""
-    # Check file extension
-    ext = filename.rsplit('.', 1)[-1].lower()
-    if ext not in settings.allowed_extensions_list:
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    
+    allowed_extensions = ['pdf', 'png', 'jpg', 'jpeg', 'tiff', 'bmp']
+    
+    if ext not in allowed_extensions:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File type .{ext} not allowed. Allowed types: {settings.ALLOWED_EXTENSIONS}"
+            detail=f"File type .{ext} not allowed. Allowed types: {', '.join(allowed_extensions)}"
         )
     
-    # Check file size
-    max_size_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
+    max_size_bytes = 50 * 1024 * 1024  # 50MB
     if file_size > max_size_bytes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File size exceeds maximum of {settings.MAX_FILE_SIZE_MB}MB"
+            detail=f"File size exceeds maximum of 50MB"
         )
 
 @router.post("/", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
@@ -42,23 +45,16 @@ async def upload_document(
 ):
     """Upload a document for OCR processing"""
     try:
+        logger.info(f"Upload request from user: {current_user.id}")
+        
         # Read file content
         content = await file.read()
         file_size = len(content)
         
+        logger.info(f"File received: {file.filename}, size: {file_size}")
+        
         # Validate file
         validate_file(file.filename, file_size)
-        
-        # Check user upload limit
-        db = get_database()
-        auth_service = AuthService(db)
-        
-        if current_user.role == UserRole.MEMBER:
-            if current_user.upload_count >= settings.AUTHENTICATED_UPLOAD_LIMIT:
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Upload limit reached"
-                )
         
         # Store file in GridFS
         gridfs = get_gridfs()
@@ -74,6 +70,8 @@ async def upload_document(
             }
         )
         
+        logger.info(f"File stored in GridFS with ID: {file_id}")
+        
         # Create document metadata
         metadata = DocumentMetadata(
             filename=f"{uuid.uuid4()}_{file.filename}",
@@ -84,7 +82,9 @@ async def upload_document(
         )
         
         # Create document record
+        db = get_database()
         document_data = {
+            "_id": str(uuid.uuid4()),
             "user_id": current_user.id,
             "gridfs_id": str(file_id),
             "metadata": metadata.dict(),
@@ -96,29 +96,17 @@ async def upload_document(
             "updated_at": datetime.utcnow()
         }
         
-        result = await db.documents.insert_one(document_data)
-        document_data["_id"] = str(result.inserted_id)
+        await db.documents.insert_one(document_data)
         
-        # Update user upload count and storage
+        logger.info(f"Document created: {document_data['_id']}")
+        
+        # Update user upload count
+        auth_service = AuthService(db)
         await auth_service.increment_upload_count(current_user.id)
         await auth_service.update_storage_used(current_user.id, file_size)
         
-        # Log to audit
-        await db.audit_logs.insert_one({
-            "user_id": current_user.id,
-            "action": "document_upload",
-            "document_id": str(result.inserted_id),
-            "timestamp": datetime.utcnow(),
-            "details": {
-                "filename": file.filename,
-                "size": file_size
-            }
-        })
-        
-        logger.info(f"Document uploaded: {result.inserted_id} by user {current_user.id}")
-        
         return DocumentResponse(
-            _id=str(result.inserted_id),
+            _id=document_data["_id"],
             user_id=current_user.id,
             metadata=metadata,
             status=DocumentStatus.UPLOADED,
@@ -126,53 +114,45 @@ async def upload_document(
             updated_at=document_data["updated_at"]
         )
     
-    except HTTPException as e:
-        raise e
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Upload error: {e}")
+        logger.error(f"Upload error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Upload failed: {str(e)}"
         )
 
-@router.get("/guest-upload")
-async def guest_upload_info():
-    """Get information about guest upload limitations"""
-    return {
-        "allowed": True,
-        "max_files": settings.GUEST_UPLOAD_LIMIT,
-        "max_size_mb": settings.MAX_FILE_SIZE_MB,
-        "allowed_formats": settings.allowed_extensions_list,
-        "limitations": {
-            "no_history": True,
-            "limited_metadata": True,
-            "auto_delete": "Files deleted after session ends"
-        }
-    }
-
-@router.get("/my-documents", response_model=List[DocumentResponse])
+@router.get("/my-documents")
 async def get_my_documents(
     skip: int = 0,
     limit: int = 20,
     current_user: UserInDB = Depends(get_current_user)
 ):
     """Get user's uploaded documents"""
-    db = get_database()
-    
-    cursor = db.documents.find(
-        {"user_id": current_user.id}
-    ).sort("created_at", -1).skip(skip).limit(limit)
-    
-    documents = await cursor.to_list(length=limit)
-    
-    result = []
-    for doc in documents:
-        doc["_id"] = str(doc["_id"])
-        result.append(DocumentResponse(**doc))
-    
-    return result
+    try:
+        logger.info(f"Fetching documents for user: {current_user.id}")
+        
+        db = get_database()
+        
+        cursor = db.documents.find(
+            {"user_id": current_user.id}
+        ).sort("created_at", -1).skip(skip).limit(limit)
+        
+        documents = await cursor.to_list(length=limit)
+        
+        logger.info(f"Found {len(documents)} documents")
+        
+        return documents
+        
+    except Exception as e:
+        logger.error(f"Error fetching documents: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch documents: {str(e)}"
+        )
 
-@router.get("/{document_id}", response_model=DocumentResponse)
+@router.get("/{document_id}")
 async def get_document(
     document_id: str,
     current_user: UserInDB = Depends(get_current_user)
@@ -188,15 +168,13 @@ async def get_document(
             detail="Document not found"
         )
     
-    # Check ownership (unless admin)
     if document["user_id"] != current_user.id and current_user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied"
         )
     
-    document["_id"] = str(document["_id"])
-    return DocumentResponse(**document)
+    return document
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(
@@ -214,7 +192,6 @@ async def delete_document(
             detail="Document not found"
         )
     
-    # Check ownership (unless admin)
     if document["user_id"] != current_user.id and current_user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -224,7 +201,7 @@ async def delete_document(
     # Delete from GridFS
     gridfs = get_gridfs()
     try:
-        await gridfs.delete(document["gridfs_id"])
+        await gridfs.delete(ObjectId(document["gridfs_id"]))
     except Exception as e:
         logger.error(f"Error deleting file from GridFS: {e}")
     
@@ -240,13 +217,5 @@ async def delete_document(
         current_user.id, 
         -document["metadata"]["file_size"]
     )
-    
-    # Log to audit
-    await db.audit_logs.insert_one({
-        "user_id": current_user.id,
-        "action": "document_delete",
-        "document_id": document_id,
-        "timestamp": datetime.utcnow()
-    })
     
     return None

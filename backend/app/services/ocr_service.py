@@ -15,14 +15,14 @@ from ..config import settings
 logger = logging.getLogger(__name__)
 
 class OCRService:
-    """Multi-engine OCR service supporting Tesseract, PaddleOCR, and EasyOCR"""
+    """Multi-engine OCR service with improved accuracy"""
     
     def __init__(self):
         self.executor = ThreadPoolExecutor(max_workers=3)
         self.gpu_enabled = settings.GPU_ENABLED
         
         # Initialize engines lazily
-        self._tesseract_initialized = True  # Always available
+        self._tesseract_initialized = True
         self._paddle_ocr = None
         self._easy_ocr = None
         
@@ -36,7 +36,9 @@ class OCRService:
                     use_angle_cls=True,
                     lang='en',
                     use_gpu=self.gpu_enabled,
-                    show_log=False
+                    show_log=False,
+                    det_db_thresh=0.3,
+                    det_db_box_thresh=0.5
                 )
                 logger.info("PaddleOCR initialized successfully")
             except Exception as e:
@@ -49,7 +51,8 @@ class OCRService:
                 self._easy_ocr = easyocr.Reader(
                     ['en'],
                     gpu=self.gpu_enabled,
-                    verbose=False
+                    verbose=False,
+                    download_enabled=True
                 )
                 logger.info("EasyOCR initialized successfully")
             except Exception as e:
@@ -60,35 +63,52 @@ class OCRService:
         image: np.ndarray, 
         page_number: int
     ) -> OCRResult:
-        """Extract text using Tesseract"""
+        """Extract text using Tesseract with improved config"""
         start_time = datetime.utcnow()
         
         try:
-            # Run Tesseract in thread pool
             loop = asyncio.get_event_loop()
             
-            # Get detailed data including confidence
+            # Enhanced Tesseract config
+            config = '--psm 6 --oem 3 -c preserve_interword_spaces=1'
+            
+            # Get detailed data
             data = await loop.run_in_executor(
                 self.executor,
                 lambda: pytesseract.image_to_data(
                     image,
                     output_type=pytesseract.Output.DICT,
-                    config='--psm 6'
+                    config=config
                 )
             )
             
-            # Extract text and calculate average confidence
+            # Build text with proper spacing
             texts = []
             confidences = []
+            last_block = -1
+            last_line = -1
             
-            for i, conf in enumerate(data['conf']):
-                if int(conf) > 0:  # Valid confidence
+            for i in range(len(data['text'])):
+                conf = int(data['conf'][i])
+                if conf > 30:  # Lower threshold for better recall
                     text = data['text'][i].strip()
                     if text:
+                        # Add line breaks for new lines/blocks
+                        if last_block != data['block_num'][i]:
+                            if texts:
+                                texts.append('\n\n')
+                        elif last_line != data['line_num'][i]:
+                            if texts:
+                                texts.append('\n')
+                        elif texts:
+                            texts.append(' ')
+                        
                         texts.append(text)
-                        confidences.append(int(conf))
+                        confidences.append(conf)
+                        last_block = data['block_num'][i]
+                        last_line = data['line_num'][i]
             
-            full_text = ' '.join(texts)
+            full_text = ''.join(texts).strip()
             avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
             
             processing_time = (datetime.utcnow() - start_time).total_seconds()
@@ -96,7 +116,7 @@ class OCRService:
             return OCRResult(
                 engine=OCREngine.TESSERACT,
                 text=full_text,
-                confidence=avg_confidence / 100.0,  # Convert to 0-1 scale
+                confidence=avg_confidence / 100.0,
                 processing_time=processing_time,
                 page_number=page_number
             )
@@ -116,7 +136,7 @@ class OCRService:
         image: np.ndarray, 
         page_number: int
     ) -> OCRResult:
-        """Extract text using PaddleOCR"""
+        """Extract text using PaddleOCR with improved parsing"""
         start_time = datetime.utcnow()
         
         try:
@@ -130,16 +150,41 @@ class OCRService:
                 lambda: self._paddle_ocr.ocr(image, cls=True)
             )
             
+            if not result or not result[0]:
+                raise Exception("No text detected")
+            
+            # Sort by vertical position for proper reading order
+            lines = []
+            for line in result[0]:
+                if line:
+                    box = line[0]
+                    text = line[1][0]
+                    confidence = line[1][1]
+                    
+                    # Get Y coordinate (vertical position)
+                    y_pos = sum([point[1] for point in box]) / len(box)
+                    
+                    lines.append({
+                        'y_pos': y_pos,
+                        'text': text,
+                        'confidence': confidence
+                    })
+            
+            # Sort by Y position
+            lines.sort(key=lambda x: x['y_pos'])
+            
+            # Build text with line breaks
             texts = []
             confidences = []
+            last_y = None
             
-            if result and result[0]:
-                for line in result[0]:
-                    if line:
-                        text = line[1][0]
-                        confidence = line[1][1]
-                        texts.append(text)
-                        confidences.append(confidence)
+            for line in lines:
+                if last_y is not None and abs(line['y_pos'] - last_y) > 30:
+                    texts.append('\n')
+                
+                texts.append(line['text'])
+                confidences.append(line['confidence'])
+                last_y = line['y_pos']
             
             full_text = ' '.join(texts)
             avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
@@ -183,10 +228,13 @@ class OCRService:
                 lambda: self._easy_ocr.readtext(image)
             )
             
+            # Sort by position
+            sorted_result = sorted(result, key=lambda x: x[0][0][1])
+            
             texts = []
             confidences = []
             
-            for detection in result:
+            for detection in sorted_result:
                 text = detection[1]
                 confidence = detection[2]
                 texts.append(text)
@@ -223,7 +271,7 @@ class OCRService:
     ) -> List[OCRResult]:
         """Extract text using multiple OCR engines"""
         if engines is None:
-            engines = [OCREngine.TESSERACT, OCREngine.PADDLEOCR, OCREngine.EASYOCR]
+            engines = [OCREngine.TESSERACT, OCREngine.PADDLEOCR]
         
         tasks = []
         
@@ -236,30 +284,38 @@ class OCRService:
                 tasks.append(self.extract_text_easy(image, page_number))
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # Filter out exceptions
         valid_results = [r for r in results if isinstance(r, OCRResult)]
         
         return valid_results
     
     def select_best_result(self, results: List[OCRResult]) -> OCRResult:
-        """Select the best OCR result based on confidence and text length"""
+        """Select best OCR result with improved scoring"""
         if not results:
             return None
         
-        # Filter results with text
         results_with_text = [r for r in results if r.text and len(r.text) > 10]
         
         if not results_with_text:
-            return max(results, key=lambda r: len(r.text))
+            return max(results, key=lambda r: len(r.text)) if results else None
         
-        # Score based on confidence and text length
+        # Improved scoring algorithm
         scored_results = []
         for result in results_with_text:
-            score = result.confidence * 0.7 + (len(result.text) / 1000) * 0.3
-            scored_results.append((score, result))
+            # Word count and character count
+            word_count = len(result.text.split())
+            char_count = len(result.text)
+            
+            # Score components
+            confidence_score = result.confidence * 0.4
+            length_score = min(char_count / 2000, 1.0) * 0.3
+            word_score = min(word_count / 300, 1.0) * 0.3
+            
+            total_score = confidence_score + length_score + word_score
+            scored_results.append((total_score, result))
         
         best_result = max(scored_results, key=lambda x: x[0])[1]
+        logger.info(f"Selected {best_result.engine.value} (conf: {best_result.confidence:.2f}, len: {len(best_result.text)})")
+        
         return best_result
     
     async def process_document(
@@ -278,6 +334,7 @@ class OCRService:
                 best_result = self.select_best_result(page_results)
                 if best_result:
                     all_results.append(best_result)
+                    logger.info(f"Page {page_num}: {len(best_result.text)} chars extracted")
             else:
                 result = await self.extract_text_tesseract(image, page_num)
                 all_results.append(result)

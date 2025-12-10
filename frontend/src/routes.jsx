@@ -1,9 +1,5 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
-
-// Layouts
-import DashboardLayout from './components/Layout/DashboardLayout';
-import MainLayout from './components/Layout/MainLayout';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 // Pages
 import HomePage from './pages/HomePage';
@@ -11,46 +7,105 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import UploadPage from './pages/UploadPage';
-import OCRProcessingPage from './pages/OCRProcessingPage';
-import QueryPage from './pages/QueryPage';
-import ResultsPage from './pages/ResultsPage';
-import AnalyticsPage from './pages/AnalyticsPage';
+import OCRResultsPage from './pages/OCRResultsPage';
+import QueryChatPage from './pages/QueryChatPage';
 import MyFilesPage from './pages/MyFilesPage';
+import AnalyticsPage from './pages/AnalyticsPage';
 import SettingsPage from './pages/SettingsPage';
 import NotFound from './pages/NotFound';
 
-const routes = [
-  {
-    path: '/',
-    element: <MainLayout />,
-    children: [
-      { path: '/', element: <HomePage /> },
-      { path: '/login', element: <LoginPage /> },
-      { path: '/register', element: <RegisterPage /> },
-    ],
-  },
-  {
-    path: '/app',
-    element: <DashboardLayout />,
-    children: [
-      { path: '/app/dashboard', element: <DashboardPage /> },
-      { path: '/app/upload', element: <UploadPage /> },
-      { path: '/app/processing', element: <OCRProcessingPage /> },
-      { path: '/app/query', element: <QueryPage /> },
-      { path: '/app/results/:id', element: <ResultsPage /> },
-      { path: '/app/analytics', element: <AnalyticsPage /> },
-      { path: '/app/my-files', element: <MyFilesPage /> },
-      { path: '/app/settings', element: <SettingsPage /> },
-    ],
-  },
-  {
-    path: '/404',
-    element: <NotFound />,
-  },
-  {
-    path: '*',
-    element: <Navigate to="/404" replace />,
-  },
-];
+// Context
+import { AuthProvider, useAuth } from './context/AuthContext';
 
-export default routes;
+// Protected Route Component
+const PrivateRoute = ({ children }) => {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  return isAuthenticated ? children : <Navigate to="/login" />;
+};
+
+const AppRoutes = () => {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/" element={<HomePage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+
+          {/* Protected Routes */}
+          <Route
+            path="/dashboard"
+            element={
+              <PrivateRoute>
+                <DashboardPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/upload"
+            element={
+              <PrivateRoute>
+                <UploadPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/results/:documentId"
+            element={
+              <PrivateRoute>
+                <OCRResultsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/query/:documentId"
+            element={
+              <PrivateRoute>
+                <QueryChatPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/my-files"
+            element={
+              <PrivateRoute>
+                <MyFilesPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/analytics"
+            element={
+              <PrivateRoute>
+                <AnalyticsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <PrivateRoute>
+                <SettingsPage />
+              </PrivateRoute>
+            }
+          />
+
+          {/* 404 */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  );
+};
+
+export default AppRoutes;
